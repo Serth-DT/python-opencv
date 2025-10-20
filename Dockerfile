@@ -21,6 +21,10 @@ RUN apt-get update && apt-get install -y \
     libtiff-dev \
     libatlas-base-dev \
     python3-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libgthread-2.0-0 \
+    libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
