@@ -35,10 +35,10 @@ DEFAULT_SCHEME = {
 }
 
 RGB_MAP: Dict[str, tuple[int, int, int]] = {
-    "U": (255, 255, 0),    # yellow
+    "U": (255, 255, 255),  # white
     "R": (255, 0, 0),      # red
     "F": (0, 200, 0),      # green
-    "D": (255, 255, 255),  # white
+    "D": (255, 255, 0),    # yellow
     "L": (255, 128, 0),    # orange
     "B": (0, 0, 255)       # blue
 }

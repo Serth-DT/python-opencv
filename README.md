@@ -30,6 +30,20 @@ curl -X POST http://localhost:8081/detect/cube \
 You will receive a JSON payload containing `facelets`. Use that value when
 calling `/rubik/solve` on the Node backend.
 
+### Calibrating colours
+
+If ambient lighting differs significantly, send the six face images to the calibration endpoint to derive a custom palette:
+
+```bash
+curl -X POST http://localhost:8081/calibrate \
+  -H 'Content-Type: application/json' \
+  -d '{"images": ["<base64_up>", "<base64_right>", "<base64_front>",
+                  "<base64_down>", "<base64_left>", "<base64_back>"]}'
+```
+
+The service responds with `palette` (BGR arrays per face) you can persist and
+send back to `/detect/cube` under the `palette` field for subsequent solves.
+
 ## Running tests
 
 Install the optional test dependency and execute the suite with `pytest`:

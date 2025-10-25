@@ -20,10 +20,10 @@ import numpy as np
 
 OUTPUT_DIR = Path(__file__).resolve().parent
 TILE_COLORS = {
-    'U': (0, 255, 255),    # yellow
+    'U': (255, 255, 255),  # white
     'R': (0, 0, 255),      # red
     'F': (0, 255, 0),      # green
-    'D': (255, 255, 255),  # white
+    'D': (0, 255, 255),    # yellow
     'L': (0, 165, 255),    # orange
     'B': (255, 0, 0),      # blue
 }

@@ -1,5 +1,12 @@
-# Use pre-built OpenCV image
-FROM opencv/opencv:4.10.0-python3.11
+# Use Python 3.11 slim image
+FROM python:3.11-slim
+
+# Install minimal system dependencies for opencv-python-headless
+RUN apt-get update && apt-get install -y \
+    libglib2.0-0 \
+    libgomp1 \
+    libgcc-s1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app

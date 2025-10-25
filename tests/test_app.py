@@ -13,10 +13,10 @@ client = TestClient(app)
 _rng = np.random.default_rng(42)
 
 _BGR_COLOR_MAP: Dict[str, tuple[int, int, int]] = {
-    'U': (0, 255, 255),    # yellow
+    'U': (255, 255, 255),  # white
     'R': (0, 0, 255),      # red
     'F': (0, 255, 0),      # green
-    'D': (255, 255, 255),  # white
+    'D': (0, 255, 255),    # yellow
     'L': (0, 165, 255),    # orange
     'B': (255, 0, 0),      # blue
 }

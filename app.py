@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import cv2
 import numpy as np
@@ -36,6 +36,10 @@ if not logger.handlers:
 class DetectRequest(BaseModel):
   images: List[str] = Field(
       ..., description="List of base64-encoded images representing cube faces")
+  palette: Optional[Dict[str, List[int]]] = Field(
+      None,
+      description="Optional colour palette overrides in BGR order"
+  )
 
 
 class DetectResponse(BaseModel):
@@ -43,13 +47,23 @@ class DetectResponse(BaseModel):
 
 
 BGR_REFERENCES = {
-    'U': (30, 220, 255),    # Yellow (BGR)
+    'U': (230, 230, 230),   # White (BGR)
     'R': (30, 30, 230),     # Red
     'F': (30, 180, 40),     # Green
-    'D': (230, 230, 230),   # White
+    'D': (30, 220, 255),    # Yellow
     'L': (0, 140, 255),     # Orange
     'B': (230, 60, 30),     # Blue
 }
+
+
+class CalibrateRequest(BaseModel):
+  images: List[str] = Field(
+      ..., description="List of base64-encoded images representing cube faces")
+
+
+class CalibrateResponse(BaseModel):
+  palette: Dict[str, List[int]] = Field(
+      ..., description="Calibrated colour palette in BGR order")
 
 
 def _bgr_to_lab(color) -> np.ndarray:
@@ -77,17 +91,27 @@ def detect_cube(req: DetectRequest) -> DetectResponse:
       logger.warning("decode_failed image_index=%d", index)
       raise HTTPException(status_code=400, detail=f"Image {index + 1} invalid")
 
-    samples = _extract_face_samples(image)
-    if len(samples) != 9:
-      logger.warning("sticker_detection_failed image_index=%d stickers=%d", index, len(samples))
+    lab_samples, _ = _extract_face_samples(image)
+    if len(lab_samples) != 9:
+      logger.warning("sticker_detection_failed image_index=%d stickers=%d", index, len(lab_samples))
       raise HTTPException(status_code=422, detail="Unable to detect 9 stickers")
 
     label = FACE_ORDER[index]
-    face_samples.append(samples)
-    canonical_colors[label] = samples[4]
+    face_samples.append(lab_samples)
+    canonical_colors[label] = lab_samples[4]
 
   for label in FACE_ORDER:
     canonical_colors.setdefault(label, COLOR_REFERENCES[label])
+
+  if req.palette:
+    for label, override in req.palette.items():
+      if label not in FACE_ORDER:
+        continue
+      try:
+        constPalette = tuple(int(v) for v in override)
+        canonical_colors[label] = _bgr_to_lab(constPalette)
+      except Exception:
+        logger.warning({"label": label, "value": override}, "Invalid palette override received")
 
   assignments = _assign_facelets(face_samples, canonical_colors)
   facelets = ''.join(assignments)
@@ -106,6 +130,32 @@ def healthz() -> dict[str, str]:
   return {"status": "ok"}
 
 
+@app.post("/calibrate", response_model=CalibrateResponse)
+def calibrate(req: CalibrateRequest) -> CalibrateResponse:
+  if len(req.images) < 6:
+    raise HTTPException(status_code=400, detail="At least 6 images are required")
+
+  palette: Dict[str, List[int]] = {}
+
+  for index, encoded in enumerate(req.images[:6]):
+    image = _decode_base64_image(encoded)
+    if image is None:
+      logger.warning("calibrate_decode_failed image_index=%d", index)
+      raise HTTPException(status_code=400, detail=f"Image {index + 1} invalid")
+
+    _, bgr_samples = _extract_face_samples(image)
+    if len(bgr_samples) != 9:
+      logger.warning("calibrate_sticker_failed image_index=%d stickers=%d", index, len(bgr_samples))
+      raise HTTPException(status_code=422, detail="Unable to detect 9 stickers for calibration")
+
+    label = FACE_ORDER[index]
+    center_bgr = bgr_samples[4]
+    palette[label] = [int(round(float(value))) for value in center_bgr.tolist()]
+
+  logger.info("calibration_palette %s", palette)
+  return CalibrateResponse(palette=palette)
+
+
 def _decode_base64_image(data: str) -> np.ndarray | None:
   try:
     raw = base64.b64decode(data)
@@ -119,21 +169,24 @@ def _decode_base64_image(data: str) -> np.ndarray | None:
     return None
 
 
-def _extract_face_samples(image: np.ndarray) -> List[np.ndarray]:
+def _extract_face_samples(image: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
   height, width, _ = image.shape
   rows = np.array_split(np.arange(height), 3)
   cols = np.array_split(np.arange(width), 3)
 
-  lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-  stickers: List[np.ndarray] = []
+  lab_samples: List[np.ndarray] = []
+  bgr_samples: List[np.ndarray] = []
 
   for row_indices in rows:
     for col_indices in cols:
-      roi = lab[np.ix_(row_indices, col_indices)]
-      mean_lab = roi.mean(axis=(0, 1)).astype(np.float32)
-      stickers.append(mean_lab)
+      roi_bgr = image[np.ix_(row_indices, col_indices)]
+      mean_bgr = roi_bgr.mean(axis=(0, 1))
+      mean_bgr_uint8 = np.clip(mean_bgr, 0, 255).astype(np.uint8)
+      mean_lab = cv2.cvtColor(mean_bgr_uint8.reshape(1, 1, 3), cv2.COLOR_BGR2LAB)[0, 0].astype(np.float32)
+      lab_samples.append(mean_lab)
+      bgr_samples.append(mean_bgr.astype(np.float32))
 
-  return stickers
+  return lab_samples, bgr_samples
 
 
 def _assign_facelets(
